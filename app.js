@@ -5,7 +5,69 @@ function renderHistory(){historyList.innerHTML=history.length?history.map(x=>`<d
 function escapeHtml(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 function setState(next,text){document.body.dataset.state=next;state.textContent=text||({idle:'Tap the microphone to speak',listening:'Listening… speak now',thinking:'Vanta is thinking…',searching:'Searching the web…',acting:'Vanta is acting…',speaking:'Vanta is speaking…',error:'Something went wrong.'}[next]||next);statusText.textContent=next==='idle'?'AI ready':next[0].toUpperCase()+next.slice(1);if(activity)activity.textContent=next.toUpperCase()}
 function speak(text){if(!voiceToggle.checked||!('speechSynthesis'in window))return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang=langSelect.value;u.rate=.98;u.pitch=1;u.onstart=()=>setState('speaking');u.onend=()=>setState('idle');speechSynthesis.speak(u)}
-async function askGemini(text){response.textContent='';setState('thinking');try{const r=await fetch('/api/chat/stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,sessionId})});if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error||`AI request failed (${r.status})`)}const reader=r.body.getReader(),decoder=new TextDecoder();let buffer='',answerText='';while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const chunks=buffer.split('\n\n');buffer=chunks.pop()||'';for(const chunk of chunks){let event='message',data='';for(const line of chunk.split('\n')){if(line.startsWith('event:'))event=line.slice(6).trim();if(line.startsWith('data:'))data+=line.slice(5).trim()}if(!data)continue;let payload;try{payload=JSON.parse(data)}catch{continue}if(event==='state'||event==='ready'){setState(payload.state||'thinking')}else if(event==='token'){answerText+=payload.text||'';response.textContent=answerText}else if(event==='citations'){setState('searching')}else if(event==='error')throw new Error(payload.error||'Streaming failed')}}}if(!answerText)answerText='I could not generate a response.';saveHistory(text,answerText);speak(answerText);if(!speechSynthesis||!voiceToggle.checked)setState('idle')}catch(e){const msg=e.message.includes('Failed to fetch')?'Backend is not running. Start the VantaVoice server.':e.message;response.textContent=msg;saveHistory(text,msg);setState('error',msg)}}
+async function askGemini(text) {
+	response.textContent = '';
+	setState('thinking');
+	try {
+		const r = await fetch('/api/chat/stream', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ message: text, sessionId })
+		});
+		if (!r.ok) {
+			const data = await r.json().catch(() => ({}));
+			throw new Error(data.error || `AI request failed (${r.status})`);
+		}
+
+		const reader = r.body.getReader();
+		const decoder = new TextDecoder();
+		let buffer = '';
+		let answerText = '';
+		while (true) {
+			const { value, done } = await reader.read();
+			if (done) break;
+			buffer += decoder.decode(value, { stream: true });
+			const chunks = buffer.split('\n\n');
+			buffer = chunks.pop() || '';
+			for (const chunk of chunks) {
+				let event = 'message';
+				let data = '';
+				for (const line of chunk.split('\n')) {
+					if (line.startsWith('event:')) event = line.slice(6).trim();
+					if (line.startsWith('data:')) data += line.slice(5).trim();
+				}
+				if (!data) continue;
+				let payload;
+				try {
+					payload = JSON.parse(data);
+				} catch {
+					continue;
+				}
+				if (event === 'state' || event === 'ready') {
+					setState(payload.state || 'thinking');
+				} else if (event === 'token') {
+					answerText += payload.text || '';
+					response.textContent = answerText;
+				} else if (event === 'citations') {
+					setState('searching');
+				} else if (event === 'error') {
+					throw new Error(payload.error || 'Streaming failed');
+				}
+			}
+		}
+		if (!answerText) answerText = 'I could not generate a response.';
+		saveHistory(text, answerText);
+		speak(answerText);
+		if (!('speechSynthesis' in window) || !voiceToggle.checked) setState('idle');
+	} catch (error) {
+		const message = error.message.includes('Failed to fetch')
+			? 'Backend is not running. Start the VantaVoice server.'
+			: error.message;
+		response.textContent = message;
+		saveHistory(text, message);
+		setState('error', message);
+	}
+}
 async function answer(text){const q=text.toLowerCase().trim(),r=localAnswer(q);if(r){response.textContent=r;saveHistory(text,r);speak(r);return}await askGemini(text)}
 function localAnswer(q){if(q.includes('setting')){settingsPanel.classList.toggle('show');return'Settings panel toggled.'}if(q.includes('joke'))return'Why do programmers prefer dark mode? Because light attracts bugs.';if(/^(hello|hi|hey)\b/.test(q))return'Hey! VantaVoice is listening.';return null}
 function start(){if(!recognition||isListening)return;try{recognition.lang=langSelect.value;recognition.start()}catch(e){}}
