@@ -1,33 +1,100 @@
 # VantaVoice
 
-A privacy-first, hackathon-ready voice interface that turns speech into useful actions and responses.
+**VantaVoice** is a privacy-first, hackathon-ready voice AI workspace: browser speech input + secure Gemini backend + server-side tool calling + local conversation history + PWA support.
 
-## Vision
-VantaVoice is designed as a modular voice assistant experience with a clean dark UI, browser-native speech input, command routing, AI-ready backend integration, and local-first settings.
+## Architecture
 
-## MVP
-- 🎙️ Voice input using the Web Speech API
-- 🔊 Text-to-speech responses
-- ⚡ Command detection for common actions
-- 🤖 AI-ready provider adapter
-- 🌓 Premium dark interface
-- 📊 Conversation/activity panel
-- 🔐 No API keys committed to source control
-- 📱 Responsive design
+```text
+Browser / PWA
+   │
+   ├─ Web Speech API → transcript
+   ├─ local history/settings
+   └─ POST /api/chat
+             │
+        Node + Express
+             │
+      @google/genai SDK
+             │
+          Gemini
+             │
+       Tool decision
+             │
+   ┌─────────┼──────────┐
+   │         │          │
+ time      date     calculator
+   └─────────┴──────────┘
+             │
+        final response
+```
 
-## Run
-Open `index.html` in a modern browser, or serve the repository with any static web server.
+Gemini function calling follows Google's current pattern: the model proposes a function call, the application executes the function, and the result is sent back to the model for the final response. citeturn0search1turn0search3
 
-## Configuration
-Create a local `.env` or configure your backend separately. Never put private API keys directly in frontend JavaScript or commit secrets to GitHub.
+## Features
+
+- 🎙️ Browser-native voice input
+- 🤖 Gemini-powered natural-language responses
+- 🧰 Secure server-side function/tool calling
+- ⏱️ Current time and date tools
+- 🧮 Safe basic calculator tool
+- 🔊 Text-to-speech replies
+- 🧠 Local conversation history
+- ⚙️ Language and voice settings
+- 📱 Responsive dark/neon UI
+- 📦 PWA + offline shell
+- 🔐 Gemini API key stays server-side
+
+## Run locally
+
+### 1. Install dependencies
+
+```bash
+cd server
+npm install
+```
+
+### 2. Create the environment file
+
+Copy `server/.env.example` to `server/.env` and set your Gemini API key there.
+
+**Never commit `server/.env` or paste a real API key into GitHub/source code.**
+
+### 3. Start VantaVoice
+
+```bash
+npm start
+```
+
+Then open:
+
+```text
+http://localhost:3000
+```
+
+The backend exposes `/api/health` and `/api/chat`. The frontend automatically uses `/api/chat` for requests that need Gemini.
+
+## Important
+
+Opening `index.html` directly still gives you the local voice UI, but Gemini mode requires the Node server because the API key must remain private.
+
+## Security design
+
+- API key is read from `GEMINI_API_KEY` on the server.
+- `.env` is ignored by Git.
+- Frontend never receives the API key.
+- Request bodies are size-limited.
+- Tools are allowlisted on the server.
+- Calculator input is restricted to basic arithmetic characters.
+- Tool execution is performed by application code, not by Gemini itself.
 
 ## Roadmap
-1. Gemini/OpenAI-compatible backend adapter
-2. Wake-word support
-3. Tool/action plugins
-4. Local command history
-5. Accessibility and keyboard controls
-6. PWA/offline shell
+
+1. Streaming Gemini responses
+2. Wake-word / hands-free mode
+3. More allowlisted productivity tools
+4. Optional encrypted cloud conversation sync
+5. Accessibility and keyboard-first controls
+6. Deployment-ready backend configuration
 
 ## License
+
 MIT
