@@ -10,8 +10,11 @@ import crypto from 'node:crypto';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
-const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const PROVIDER = (process.env.AI_PROVIDER || (process.env.GROQ_API_KEY ? 'groq' : 'gemini')).toLowerCase();
+const MODEL = PROVIDER === 'groq' ? (process.env.GROQ_MODEL || 'llama-3.3-70b-versatile') : (process.env.GEMINI_MODEL || 'gemini-2.5-flash');
 const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
+const groqKey = process.env.GROQ_API_KEY || '';
+const groqEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
 const DATA_DIR = path.join(__dirname, 'data');
 const MEMORY_FILE = path.join(DATA_DIR, 'memory.json');
 const NOTES_FILE = path.join(DATA_DIR, 'notes.json');
@@ -38,6 +41,7 @@ const functionDeclarations = [
   { name: 'list_notes', description: 'List recent local notes for this session.', parameters: { type: 'object', properties: { session_id: { type: 'string' } }, required: ['session_id'] } }
 ];
 const tools = [{ googleSearch: {} }, { functionDeclarations }];
+const groqTools = functionDeclarations.map(declaration => ({ type: 'function', function: declaration }));
 
 function calculate(expression) {
   if (typeof expression !== 'string' || !/^[0-9+\-*/%.()\s]+$/.test(expression)) return { error: 'Only basic arithmetic is supported.' };
@@ -66,17 +70,44 @@ function geminiErrorMessage(error) {
   if (error?.status === 429) return 'Gemini quota exceeded. Check your Google AI Studio plan, billing, or rate limits.';
   return 'Gemini request failed. Check server configuration and try again.';
 }
+function groqErrorMessage(error) {
+  if (error?.status === 401) return 'Groq authentication failed. Set GROQ_API_KEY to a valid Groq API key.';
+  if (error?.status === 429) return 'Groq rate limit or quota exceeded. Check your Groq plan and limits.';
+  return 'Groq request failed. Check server configuration and try again.';
+}
+function providerConfigured() { return PROVIDER === 'groq' ? Boolean(groqKey) : Boolean(ai); }
+function providerSetupMessage() { return PROVIDER === 'groq' ? 'Groq is not configured. Add GROQ_API_KEY to server/.env.' : 'Gemini is not configured. Add GEMINI_API_KEY to server/.env.'; }
+async function groqAgent(message, context, sid) {
+  const messages = [{ role: 'system', content: `${SYSTEM}${context}` }, { role: 'user', content: message }];
+  for (let round = 0; round < 4; round += 1) {
+    const result = await fetch(groqEndpoint, { method: 'POST', headers: { Authorization: `Bearer ${groqKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: MODEL, messages, tools: groqTools, tool_choice: 'auto', temperature: 0.4 }) });
+    if (!result.ok) { const error = new Error('Groq request failed'); error.status = result.status; throw error; }
+    const data = await result.json();
+    const messageResponse = data.choices?.[0]?.message;
+    if (!messageResponse) throw new Error('Groq returned an empty response');
+    if (!messageResponse.tool_calls?.length) return messageResponse.content || 'I could not generate a response.';
+    messages.push(messageResponse);
+    for (const call of messageResponse.tool_calls) {
+      let args = {};
+      try { args = JSON.parse(call.function.arguments || '{}'); } catch { args = {}; }
+      const toolResult = await executeTool(call.function.name, { ...args, session_id: args.session_id || sid });
+      messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(toolResult) });
+    }
+  }
+  return 'I could not complete all requested actions.';
+}
 function sendEvent(res, event, data) { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); }
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, aiConfigured: Boolean(ai), model: MODEL, features: ['streaming', 'google_search', 'memory', 'notes', 'calculator', 'voice-wake-style'] }));
+app.get('/api/health', (_req, res) => res.json({ ok: true, provider: PROVIDER, aiConfigured: providerConfigured(), model: MODEL, features: ['streaming', 'memory', 'notes', 'calculator', 'voice-wake-style', ...(PROVIDER === 'gemini' ? ['google_search'] : [])] }));
 
 app.post('/api/chat', async (req, res) => {
-  if (!ai) return res.status(503).json({ error: 'Gemini is not configured. Add GEMINI_API_KEY to server/.env.' });
+  if (!providerConfigured()) return res.status(503).json({ error: providerSetupMessage() });
   const message = cleanText(req.body?.message, 4000); if (!message) return res.status(400).json({ error: 'Message must be 1–4000 characters.' });
   const sid = sessionId(req.body?.sessionId) || crypto.randomUUID();
   try {
     const memory = await executeTool('recall_memory', { session_id: sid });
     const context = memory.memories.length ? `\nKnown user memories for this session:\n- ${memory.memories.join('\n- ')}` : '';
+    if (PROVIDER === 'groq') return res.json({ text: await groqAgent(message, context, sid), model: MODEL, provider: PROVIDER, sessionId: sid });
     const contents = [{ role: 'user', parts: [{ text: message }] }];
     let response;
     for (let round = 0; round < 4; round++) {
@@ -87,17 +118,24 @@ app.post('/api/chat', async (req, res) => {
       contents.push({ role: 'user', parts: await Promise.all(calls.map(async call => ({ functionResponse: { name: call.name, response: await executeTool(call.name, { ...call.args, session_id: call.args?.session_id || sid }) } })) ) });
     }
     res.json({ text: outputText(response) || 'I completed the request, but could not produce a text response.', model: MODEL, sessionId: sid });
-  } catch (error) { console.error('Gemini request failed:', error); res.status(502).json({ error: geminiErrorMessage(error) }); }
+  } catch (error) { console.error(`${PROVIDER} request failed:`, error); res.status(502).json({ error: PROVIDER === 'groq' ? groqErrorMessage(error) : geminiErrorMessage(error) }); }
 });
 
 app.post('/api/chat/stream', async (req, res) => {
-  if (!ai) return res.status(503).json({ error: 'Gemini is not configured. Add GEMINI_API_KEY to server/.env.' });
+  if (!providerConfigured()) return res.status(503).json({ error: providerSetupMessage() });
   const message = cleanText(req.body?.message, 4000); if (!message) return res.status(400).json({ error: 'Message must be 1–4000 characters.' });
   const sid = sessionId(req.body?.sessionId) || crypto.randomUUID();
   res.status(200).set({ 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' }); res.flushHeaders();
   try {
     const memory = await executeTool('recall_memory', { session_id: sid });
     const context = memory.memories.length ? `\nKnown user memories for this session:\n- ${memory.memories.join('\n- ')}` : '';
+    if (PROVIDER === 'groq') {
+      sendEvent(res, 'ready', { state: 'thinking', sessionId: sid, model: MODEL, provider: PROVIDER });
+      const text = await groqAgent(message, context, sid);
+      sendEvent(res, 'token', { text });
+      sendEvent(res, 'done', { sessionId: sid, model: MODEL, provider: PROVIDER });
+      return res.end();
+    }
     const contents = [{ role: 'user', parts: [{ text: message }] }];
     let response;
     for (let round = 0; round < 4; round++) {
@@ -111,7 +149,7 @@ app.post('/api/chat/stream', async (req, res) => {
     const text = outputText(response) || 'I could not generate a response.';
     sendEvent(res, 'token', { text });
     sendEvent(res, 'done', { sessionId: sid, model: MODEL }); res.end();
-  } catch (error) { console.error('Streaming Gemini request failed:', error); sendEvent(res, 'error', { error: geminiErrorMessage(error) }); res.end(); }
+  } catch (error) { console.error(`Streaming ${PROVIDER} request failed:`, error); sendEvent(res, 'error', { error: PROVIDER === 'groq' ? groqErrorMessage(error) : geminiErrorMessage(error) }); res.end(); }
 });
 
 app.get('/api/memory/:sessionId', async (req, res) => { const sid = sessionId(req.params.sessionId); if (!sid) return res.status(400).json({ error: 'Invalid session id.' }); const all = await readJson(MEMORY_FILE, {}); res.json({ memories: Array.isArray(all[sid]) ? all[sid] : [] }); });

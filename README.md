@@ -1,6 +1,6 @@
 # VantaVoice
 
-**VantaVoice** is a privacy-first, hackathon-ready voice AI workspace: browser speech input + secure Gemini backend + server-side tool calling + local conversation history + PWA support.
+**VantaVoice** is a privacy-first, hackathon-ready voice AI workspace: browser speech input + secure Groq or Gemini backend + server-side tool calling + local conversation history + PWA support.
 
 ## Architecture
 
@@ -15,7 +15,7 @@ Browser / PWA
              │
       @google/genai SDK
              │
-          Gemini
+          Groq or Gemini
              │
        Tool decision
              │
@@ -34,7 +34,7 @@ Gemini function calling follows Google's current pattern: the model proposes a f
 - 🎙️ Browser-native voice input
 - 🔁 Hands-free turn-taking: listen, answer, speak, and resume automatically
 - 🗣️ Optional “Hey Vanta” wake-word mode
-- 🤖 Gemini-powered natural-language responses
+- 🤖 Groq or Gemini-powered natural-language responses
 - 🧰 Secure server-side function/tool calling
 - ⏱️ Current time and date tools
 - 🧮 Safe basic calculator tool
@@ -56,7 +56,7 @@ npm install
 
 ### 2. Create the environment file
 
-Copy `server/.env.example` to `server/.env` and set your Gemini API key there.
+Copy `server/.env.example` to `server/.env` and set `AI_PROVIDER=groq` with your Groq API key. Gemini remains supported by setting `AI_PROVIDER=gemini` instead.
 
 **Never commit `server/.env` or paste a real API key into GitHub/source code.**
 
@@ -72,7 +72,7 @@ Then open:
 http://localhost:3000
 ```
 
-The backend exposes `/api/health` and `/api/chat`. The frontend automatically uses `/api/chat` for requests that need Gemini.
+The backend exposes `/api/health` and `/api/chat`. The frontend automatically uses the selected provider for requests that need AI.
 
 ## Important
 
@@ -80,7 +80,7 @@ Opening `index.html` directly still gives you the local voice UI, but Gemini mod
 
 ## Security design
 
-- API key is read from `GEMINI_API_KEY` on the server.
+- Provider API keys are read from `GROQ_API_KEY` or `GEMINI_API_KEY` on the server.
 - `.env` is ignored by Git.
 - Frontend never receives the API key.
 - Request bodies are size-limited.
@@ -104,6 +104,18 @@ Opening `index.html` directly still gives you the local voice UI, but Gemini mod
 5. For wake-word mode, enable **Wake word** and say “Hey Vanta” before each command.
 
 Browser speech recognition is provided by Chrome/Edge Web Speech APIs. A microphone permission gesture is required by the browser; after that, the conversation loop is automatic. Voice history remains local to the browser.
+
+## Groq setup
+
+In `server/.env`:
+
+```env
+AI_PROVIDER=groq
+GROQ_API_KEY=your_groq_api_key
+GROQ_MODEL=llama-3.3-70b-versatile
+```
+
+Groq supports the local function tools for time, date, calculator, memory, and notes. Google Search is available only when `AI_PROVIDER=gemini`.
 
 ## License
 
