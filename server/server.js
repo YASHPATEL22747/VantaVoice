@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { GoogleGenAI } from '@google/genai';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,9 +9,8 @@ import crypto from 'node:crypto';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
-const PROVIDER = (process.env.AI_PROVIDER || (process.env.GROQ_API_KEY ? 'groq' : 'gemini')).toLowerCase();
-const MODEL = PROVIDER === 'groq' ? (process.env.GROQ_MODEL || 'llama-3.3-70b-versatile') : (process.env.GEMINI_MODEL || 'gemini-2.5-flash');
-const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
+const PROVIDER = 'groq';
+const MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const groqKey = process.env.GROQ_API_KEY || '';
 const groqEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
 const DATA_DIR = path.join(__dirname, 'data');
@@ -40,7 +38,6 @@ const functionDeclarations = [
   { name: 'create_note', description: 'Create a local note for the user.', parameters: { type: 'object', properties: { session_id: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' } }, required: ['session_id', 'title', 'body'] } },
   { name: 'list_notes', description: 'List recent local notes for this session.', parameters: { type: 'object', properties: { session_id: { type: 'string' } }, required: ['session_id'] } }
 ];
-const tools = [{ googleSearch: {} }, { functionDeclarations }];
 const groqTools = functionDeclarations.map(declaration => ({ type: 'function', function: declaration }));
 
 function calculate(expression) {
@@ -60,23 +57,13 @@ async function executeTool(name, args = {}) {
   if (name === 'list_notes') { const all = await readJson(NOTES_FILE, {}); return { notes: (Array.isArray(all[sid]) ? all[sid] : []).slice(0, 20) }; }
   return { error: `Unknown tool: ${name}` };
 }
-function outputText(response) { return response?.text || response?.candidates?.[0]?.content?.parts?.filter(part => part.text).map(part => part.text).join(' ') || ''; }
-function functionCalls(response) { return response?.candidates?.[0]?.content?.parts?.filter(part => part.functionCall).map(part => part.functionCall) || []; }
-async function generateResponse(contents, context) {
-  return ai.models.generateContent({ model: MODEL, contents, config: { systemInstruction: `${SYSTEM}${context}`, tools } });
-}
-function geminiErrorMessage(error) {
-  if (error?.status === 401) return 'Gemini authentication failed. Set GEMINI_API_KEY to a valid Google AI Studio API key.';
-  if (error?.status === 429) return 'Gemini quota exceeded. Check your Google AI Studio plan, billing, or rate limits.';
-  return 'Gemini request failed. Check server configuration and try again.';
-}
 function groqErrorMessage(error) {
   if (error?.status === 401) return 'Groq authentication failed. Set GROQ_API_KEY to a valid Groq API key.';
   if (error?.status === 429) return 'Groq rate limit or quota exceeded. Check your Groq plan and limits.';
   return 'Groq request failed. Check server configuration and try again.';
 }
-function providerConfigured() { return PROVIDER === 'groq' ? Boolean(groqKey) : Boolean(ai); }
-function providerSetupMessage() { return PROVIDER === 'groq' ? 'Groq is not configured. Add GROQ_API_KEY to server/.env.' : 'Gemini is not configured. Add GEMINI_API_KEY to server/.env.'; }
+function providerConfigured() { return Boolean(groqKey); }
+function providerSetupMessage() { return 'Groq is not configured. Add GROQ_API_KEY to server/.env.'; }
 async function groqAgent(message, context, sid) {
   const messages = [{ role: 'system', content: `${SYSTEM}${context}` }, { role: 'user', content: message }];
   for (let round = 0; round < 4; round += 1) {
@@ -98,7 +85,7 @@ async function groqAgent(message, context, sid) {
 }
 function sendEvent(res, event, data) { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); }
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, provider: PROVIDER, aiConfigured: providerConfigured(), model: MODEL, features: ['streaming', 'memory', 'notes', 'calculator', 'voice-wake-style', ...(PROVIDER === 'gemini' ? ['google_search'] : [])] }));
+app.get('/api/health', (_req, res) => res.json({ ok: true, provider: PROVIDER, aiConfigured: providerConfigured(), model: MODEL, features: ['streaming', 'memory', 'notes', 'calculator', 'voice-wake-style'] }));
 
 app.post('/api/chat', async (req, res) => {
   if (!providerConfigured()) return res.status(503).json({ error: providerSetupMessage() });
@@ -107,18 +94,8 @@ app.post('/api/chat', async (req, res) => {
   try {
     const memory = await executeTool('recall_memory', { session_id: sid });
     const context = memory.memories.length ? `\nKnown user memories for this session:\n- ${memory.memories.join('\n- ')}` : '';
-    if (PROVIDER === 'groq') return res.json({ text: await groqAgent(message, context, sid), model: MODEL, provider: PROVIDER, sessionId: sid });
-    const contents = [{ role: 'user', parts: [{ text: message }] }];
-    let response;
-    for (let round = 0; round < 4; round++) {
-      response = await generateResponse(contents, context);
-      const calls = functionCalls(response);
-      if (!calls.length) break;
-      contents.push(response.candidates[0].content);
-      contents.push({ role: 'user', parts: await Promise.all(calls.map(async call => ({ functionResponse: { name: call.name, response: await executeTool(call.name, { ...call.args, session_id: call.args?.session_id || sid }) } })) ) });
-    }
-    res.json({ text: outputText(response) || 'I completed the request, but could not produce a text response.', model: MODEL, sessionId: sid });
-  } catch (error) { console.error(`${PROVIDER} request failed:`, error); res.status(502).json({ error: PROVIDER === 'groq' ? groqErrorMessage(error) : geminiErrorMessage(error) }); }
+    res.json({ text: await groqAgent(message, context, sid), model: MODEL, provider: PROVIDER, sessionId: sid });
+  } catch (error) { console.error('Groq request failed:', error); res.status(502).json({ error: groqErrorMessage(error) }); }
 });
 
 app.post('/api/chat/stream', async (req, res) => {
@@ -129,27 +106,11 @@ app.post('/api/chat/stream', async (req, res) => {
   try {
     const memory = await executeTool('recall_memory', { session_id: sid });
     const context = memory.memories.length ? `\nKnown user memories for this session:\n- ${memory.memories.join('\n- ')}` : '';
-    if (PROVIDER === 'groq') {
-      sendEvent(res, 'ready', { state: 'thinking', sessionId: sid, model: MODEL, provider: PROVIDER });
-      const text = await groqAgent(message, context, sid);
-      sendEvent(res, 'token', { text });
-      sendEvent(res, 'done', { sessionId: sid, model: MODEL, provider: PROVIDER });
-      return res.end();
-    }
-    const contents = [{ role: 'user', parts: [{ text: message }] }];
-    let response;
-    for (let round = 0; round < 4; round++) {
-      sendEvent(res, round ? 'state' : 'ready', { state: round ? 'acting' : 'thinking', sessionId: sid, model: MODEL });
-      response = await generateResponse(contents, context);
-      const calls = functionCalls(response);
-      if (!calls.length) break;
-      contents.push(response.candidates[0].content);
-      contents.push({ role: 'user', parts: await Promise.all(calls.map(async call => ({ functionResponse: { name: call.name, response: await executeTool(call.name, { ...call.args, session_id: call.args?.session_id || sid }) } })) ) });
-    }
-    const text = outputText(response) || 'I could not generate a response.';
+    sendEvent(res, 'ready', { state: 'thinking', sessionId: sid, model: MODEL, provider: PROVIDER });
+    const text = await groqAgent(message, context, sid);
     sendEvent(res, 'token', { text });
     sendEvent(res, 'done', { sessionId: sid, model: MODEL }); res.end();
-  } catch (error) { console.error(`Streaming ${PROVIDER} request failed:`, error); sendEvent(res, 'error', { error: PROVIDER === 'groq' ? groqErrorMessage(error) : geminiErrorMessage(error) }); res.end(); }
+  } catch (error) { console.error('Streaming Groq request failed:', error); sendEvent(res, 'error', { error: groqErrorMessage(error) }); res.end(); }
 });
 
 app.get('/api/memory/:sessionId', async (req, res) => { const sid = sessionId(req.params.sessionId); if (!sid) return res.status(400).json({ error: 'Invalid session id.' }); const all = await readJson(MEMORY_FILE, {}); res.json({ memories: Array.isArray(all[sid]) ? all[sid] : [] }); });

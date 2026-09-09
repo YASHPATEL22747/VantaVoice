@@ -29,7 +29,7 @@ function startWakeListener() { if (!SpeechRecognition || wakeRecognition) return
 function stopWakeListener() { try { wakeRecognition?.stop(); } catch (error) { /* already stopped */ } wakeRecognition = null; }
 function setHandsFree(enabled) { handsFree = enabled; if (handsFree) { shouldResume = true; startListening(); setState('listening'); } else { shouldResume = false; stopListening(); if (!wakeEnabled) setState('idle'); } updateControls(); }
 function setWakeMode(enabled) { wakeEnabled = enabled; if (wakeEnabled) { handsFree = true; stopListening(); startWakeListener(); } else { stopWakeListener(); setState('idle'); if (handsFree) startListening(); } updateControls(); }
-async function askGemini(text) {
+async function askAI(text) {
   requestInFlight = true; stopListening(); response.textContent = ''; setState('thinking');
   try {
     const result = await fetch('/api/chat/stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, sessionId }) });
@@ -51,7 +51,7 @@ function localAnswer(query) {
   if (/^(hello|hi|hey)\b/.test(query)) return 'Hey! VantaVoice is listening.';
   return null;
 }
-async function answer(text) { const query = text.toLowerCase().trim(); transcript.textContent = text; const local = localAnswer(query); if (local) { response.textContent = local; saveHistory(text, local); speak(local); return; } await askGemini(text); }
+async function answer(text) { const query = text.toLowerCase().trim(); transcript.textContent = text; const local = localAnswer(query); if (local) { response.textContent = local; saveHistory(text, local); speak(local); return; } await askAI(text); }
 function openPanel(panel) { panel.hidden = false; panel.classList.add('show'); }
 function closePanel(panel) { panel.classList.remove('show'); window.setTimeout(() => { panel.hidden = true; }, 180); }
 
@@ -77,5 +77,5 @@ function bootHandsFree() {
   window.setTimeout(startListening, 700);
 }
 window.addEventListener('load', () => window.setTimeout(bootHandsFree, 500));
-fetch('/api/health').then(result => result.json()).then(data => { statusText.textContent = data.aiConfigured ? 'AI connected' : 'Backend ready - add Gemini key'; }).catch(() => { statusText.textContent = 'Local mode'; });
+fetch('/api/health').then(result => result.json()).then(data => { statusText.textContent = data.aiConfigured ? 'AI connected' : 'Backend ready - add Groq key'; }).catch(() => { statusText.textContent = 'Local mode'; });
 if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));

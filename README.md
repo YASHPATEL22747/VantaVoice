@@ -1,6 +1,6 @@
 # VantaVoice
 
-**VantaVoice** is a privacy-first, hackathon-ready voice AI workspace: browser speech input + secure Groq or Gemini backend + server-side tool calling + local conversation history + PWA support.
+**VantaVoice** is a privacy-first, hackathon-ready voice AI workspace: browser speech input + secure Groq backend + server-side tool calling + local conversation history + PWA support.
 
 ## Architecture
 
@@ -13,9 +13,9 @@ Browser / PWA
              │
         Node + Express
              │
-      @google/genai SDK
+      Groq OpenAI-compatible API
              │
-          Groq or Gemini
+               Groq
              │
        Tool decision
              │
@@ -27,14 +27,14 @@ Browser / PWA
         final response
 ```
 
-Gemini function calling follows Google's current pattern: the model proposes a function call, the application executes the function, and the result is sent back to the model for the final response. citeturn0search1turn0search3
+Groq function calling follows the OpenAI-compatible chat completions pattern: the model proposes a function call, the application executes it, and the result is sent back for the final response.
 
 ## Features
 
 - 🎙️ Browser-native voice input
 - 🔁 Hands-free turn-taking: listen, answer, speak, and resume automatically
 - 🗣️ Optional “Hey Vanta” wake-word mode
-- 🤖 Groq or Gemini-powered natural-language responses
+- 🤖 Groq-powered natural-language responses
 - 🧰 Secure server-side function/tool calling
 - ⏱️ Current time and date tools
 - 🧮 Safe basic calculator tool
@@ -43,7 +43,7 @@ Gemini function calling follows Google's current pattern: the model proposes a f
 - ⚙️ Language and voice settings
 - 📱 Responsive dark/neon UI
 - 📦 PWA + offline shell
-- 🔐 Gemini API key stays server-side
+- 🔐 Groq API key stays server-side
 
 ## Run locally
 
@@ -56,7 +56,7 @@ npm install
 
 ### 2. Create the environment file
 
-Copy `server/.env.example` to `server/.env` and set `AI_PROVIDER=groq` with your Groq API key. Gemini remains supported by setting `AI_PROVIDER=gemini` instead.
+Copy `server/.env.example` to `server/.env` and set your Groq API key there.
 
 **Never commit `server/.env` or paste a real API key into GitHub/source code.**
 
@@ -72,21 +72,21 @@ Then open:
 http://localhost:3000
 ```
 
-The backend exposes `/api/health` and `/api/chat`. The frontend automatically uses the selected provider for requests that need AI.
+The backend exposes `/api/health` and `/api/chat`. The frontend automatically uses Groq for requests that need AI.
 
 ## Important
 
-Opening `index.html` directly still gives you the local voice UI, but Gemini mode requires the Node server because the API key must remain private.
+Opening `index.html` directly still gives you the local voice UI, but AI mode requires the Node server because the API key must remain private.
 
 ## Security design
 
-- Provider API keys are read from `GROQ_API_KEY` or `GEMINI_API_KEY` on the server.
+- The `GROQ_API_KEY` is read only on the server.
 - `.env` is ignored by Git.
 - Frontend never receives the API key.
 - Request bodies are size-limited.
 - Tools are allowlisted on the server.
 - Calculator input is restricted to basic arithmetic characters.
-- Tool execution is performed by application code, not by Gemini itself.
+- Tool execution is performed by application code, not by the model itself.
 
 ## Roadmap
 
@@ -115,7 +115,7 @@ GROQ_API_KEY=your_groq_api_key
 GROQ_MODEL=llama-3.3-70b-versatile
 ```
 
-Groq supports the local function tools for time, date, calculator, memory, and notes. Google Search is available only when `AI_PROVIDER=gemini`.
+Groq supports the local function tools for time, date, calculator, memory, and notes. Web search is intentionally disabled in Groq mode; local tools remain fully server-controlled.
 
 ## License
 
