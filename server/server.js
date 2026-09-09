@@ -23,20 +23,10 @@ app.use(cors({ origin: true, methods: ['GET', 'POST'] }));
 app.use(express.json({ limit: '64kb' }));
 app.use(express.static(path.join(__dirname, '..')));
 
-async function readJson(file, fallback) {
-  try { return JSON.parse(await fs.readFile(file, 'utf8')); } catch { return fallback; }
-}
-async function writeJson(file, value) {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.writeFile(file, JSON.stringify(value, null, 2), 'utf8');
-}
-function sessionId(raw) {
-  if (typeof raw !== 'string' || !/^[a-zA-Z0-9_-]{8,80}$/.test(raw)) return null;
-  return raw;
-}
-function cleanText(value, max = 500) {
-  return typeof value === 'string' ? value.trim().slice(0, max) : '';
-}
+async function readJson(file, fallback) { try { return JSON.parse(await fs.readFile(file, 'utf8')); } catch { return fallback; } }
+async function writeJson(file, value) { await fs.mkdir(DATA_DIR, { recursive: true }); await fs.writeFile(file, JSON.stringify(value, null, 2), 'utf8'); }
+function sessionId(raw) { if (typeof raw !== 'string' || !/^[a-zA-Z0-9_-]{8,80}$/.test(raw)) return null; return raw; }
+function cleanText(value, max = 500) { return typeof value === 'string' ? value.trim().slice(0, max) : ''; }
 
 const tools = [
   { type: 'google_search' },
@@ -51,12 +41,8 @@ const tools = [
 
 function calculate(expression) {
   if (typeof expression !== 'string' || !/^[0-9+\-*/%.()\s]+$/.test(expression)) return { error: 'Only basic arithmetic is supported.' };
-  try {
-    const result = Function(`"use strict"; return (${expression})`)();
-    return Number.isFinite(result) ? { result } : { error: 'The result is not finite.' };
-  } catch { return { error: 'Invalid arithmetic expression.' }; }
+  try { const result = Function(`"use strict"; return (${expression})`)(); return Number.isFinite(result) ? { result } : { error: 'The result is not finite.' }; } catch { return { error: 'Invalid arithmetic expression.' }; }
 }
-
 async function executeTool(name, args = {}) {
   const now = new Date();
   const sid = sessionId(args.session_id);
@@ -64,142 +50,62 @@ async function executeTool(name, args = {}) {
   if (name === 'get_current_date') return { date: now.toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) };
   if (name === 'calculate') return calculate(args.expression);
   if (!sid) return { error: 'A valid local session is required.' };
-  if (name === 'save_memory') {
-    const memory = cleanText(args.memory, 300);
-    if (!memory) return { error: 'Memory cannot be empty.' };
-    const all = await readJson(MEMORY_FILE, {});
-    const list = Array.isArray(all[sid]) ? all[sid] : [];
-    list.unshift({ id: crypto.randomUUID(), memory, createdAt: new Date().toISOString() });
-    all[sid] = list.slice(0, MAX_MEMORY);
-    await writeJson(MEMORY_FILE, all);
-    return { saved: true, memory };
-  }
-  if (name === 'recall_memory') {
-    const all = await readJson(MEMORY_FILE, {});
-    return { memories: (Array.isArray(all[sid]) ? all[sid] : []).map(x => x.memory) };
-  }
-  if (name === 'create_note') {
-    const title = cleanText(args.title, 120);
-    const body = cleanText(args.body, 2000);
-    if (!title || !body) return { error: 'Note title and body are required.' };
-    const all = await readJson(NOTES_FILE, {});
-    const list = Array.isArray(all[sid]) ? all[sid] : [];
-    const note = { id: crypto.randomUUID(), title, body, createdAt: new Date().toISOString() };
-    list.unshift(note);
-    all[sid] = list.slice(0, MAX_NOTES);
-    await writeJson(NOTES_FILE, all);
-    return { saved: true, note };
-  }
-  if (name === 'list_notes') {
-    const all = await readJson(NOTES_FILE, {});
-    return { notes: (Array.isArray(all[sid]) ? all[sid] : []).slice(0, 20) };
-  }
+  if (name === 'save_memory') { const memory = cleanText(args.memory, 300); if (!memory) return { error: 'Memory cannot be empty.' }; const all = await readJson(MEMORY_FILE, {}); const list = Array.isArray(all[sid]) ? all[sid] : []; list.unshift({ id: crypto.randomUUID(), memory, createdAt: new Date().toISOString() }); all[sid] = list.slice(0, MAX_MEMORY); await writeJson(MEMORY_FILE, all); return { saved: true, memory }; }
+  if (name === 'recall_memory') { const all = await readJson(MEMORY_FILE, {}); return { memories: (Array.isArray(all[sid]) ? all[sid] : []).map(x => x.memory) }; }
+  if (name === 'create_note') { const title = cleanText(args.title, 120); const body = cleanText(args.body, 2000); if (!title || !body) return { error: 'Note title and body are required.' }; const all = await readJson(NOTES_FILE, {}); const list = Array.isArray(all[sid]) ? all[sid] : []; const note = { id: crypto.randomUUID(), title, body, createdAt: new Date().toISOString() }; list.unshift(note); all[sid] = list.slice(0, MAX_NOTES); await writeJson(NOTES_FILE, all); return { saved: true, note }; }
+  if (name === 'list_notes') { const all = await readJson(NOTES_FILE, {}); return { notes: (Array.isArray(all[sid]) ? all[sid] : []).slice(0, 20) }; }
   return { error: `Unknown tool: ${name}` };
 }
-
-function outputText(interaction) {
-  return interaction?.output_text || interaction?.steps?.filter(s => s.type === 'model_output')?.flatMap(s => s.content || []).filter(c => c.type === 'text').map(c => c.text).join(' ') || '';
-}
-function sendEvent(res, event, data) {
-  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-}
-function extractCitations(event) {
-  const content = event?.delta?.type === 'text' ? event.delta : null;
-  return content?.annotations?.filter(a => a.type === 'url_citation') || [];
-}
+function outputText(interaction) { return interaction?.output_text || interaction?.steps?.filter(s => s.type === 'model_output')?.flatMap(s => s.content || []).filter(c => c.type === 'text').map(c => c.text).join(' ') || ''; }
+function sendEvent(res, event, data) { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); }
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, aiConfigured: Boolean(ai), model: MODEL, features: ['streaming', 'google_search', 'memory', 'notes', 'calculator', 'voice-wake-style'] }));
 
 app.post('/api/chat', async (req, res) => {
   if (!ai) return res.status(503).json({ error: 'Gemini is not configured. Add GEMINI_API_KEY to server/.env.' });
-  const message = cleanText(req.body?.message, 4000);
-  if (!message) return res.status(400).json({ error: 'Message must be 1–4000 characters.' });
+  const message = cleanText(req.body?.message, 4000); if (!message) return res.status(400).json({ error: 'Message must be 1–4000 characters.' });
   const sid = sessionId(req.body?.sessionId) || crypto.randomUUID();
   try {
     const memory = await executeTool('recall_memory', { session_id: sid });
     const context = memory.memories.length ? `\nKnown user memories for this session:\n- ${memory.memories.join('\n- ')}` : '';
     let interaction = await ai.interactions.create({ model: MODEL, input: `${SYSTEM}${context}\n\nUser: ${message}`, tools, store: false });
-    for (let round = 0; round < 4; round++) {
-      const calls = (interaction.steps || []).filter(step => step.type === 'function_call');
-      if (!calls.length) break;
-      const results = await Promise.all(calls.map(async call => ({ type: 'function_result', name: call.name, call_id: call.id, result: [{ type: 'text', text: JSON.stringify(await executeTool(call.name, call.arguments || {})) }] })));
-      interaction = await ai.interactions.create({ model: MODEL, input: results, tools, previous_interaction_id: interaction.id, store: false });
-    }
+    for (let round = 0; round < 4; round++) { const calls = (interaction.steps || []).filter(step => step.type === 'function_call'); if (!calls.length) break; const results = await Promise.all(calls.map(async call => ({ type: 'function_result', name: call.name, call_id: call.id, result: [{ type: 'text', text: JSON.stringify(await executeTool(call.name, call.arguments || {})) }] }))); interaction = await ai.interactions.create({ model: MODEL, input: results, tools, previous_interaction_id: interaction.id, store: false }); }
     res.json({ text: outputText(interaction) || 'I completed the request, but could not produce a text response.', model: MODEL, sessionId: sid });
-  } catch (error) {
-    console.error('Gemini request failed:', error);
-    res.status(502).json({ error: 'Gemini request failed. Check server configuration and try again.' });
-  }
+  } catch (error) { console.error('Gemini request failed:', error); res.status(502).json({ error: 'Gemini request failed. Check server configuration and try again.' }); }
 });
 
 app.post('/api/chat/stream', async (req, res) => {
   if (!ai) return res.status(503).json({ error: 'Gemini is not configured. Add GEMINI_API_KEY to server/.env.' });
-  const message = cleanText(req.body?.message, 4000);
-  if (!message) return res.status(400).json({ error: 'Message must be 1–4000 characters.' });
+  const message = cleanText(req.body?.message, 4000); if (!message) return res.status(400).json({ error: 'Message must be 1–4000 characters.' });
   const sid = sessionId(req.body?.sessionId) || crypto.randomUUID();
-  res.status(200).set({ 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
-  res.flushHeaders();
+  res.status(200).set({ 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' }); res.flushHeaders();
   try {
     const memory = await executeTool('recall_memory', { session_id: sid });
     const context = memory.memories.length ? `\nKnown user memories for this session:\n- ${memory.memories.join('\n- ')}` : '';
     let input = `${SYSTEM}${context}\n\nUser: ${message}`;
+    let previousInteractionId = null;
     for (let round = 0; round < 4; round++) {
       sendEvent(res, round ? 'state' : 'ready', { state: round ? 'acting' : 'thinking', sessionId: sid, model: MODEL });
-      const stream = await ai.interactions.create({ model: MODEL, input, tools, store: false, stream: true, ...(round ? { previous_interaction_id: req._previousInteractionId } : {}) });
-      let interactionId = null;
-      const calls = new Map();
-      let requiresAction = false;
+      const stream = await ai.interactions.create({ model: MODEL, input, tools, store: false, stream: true, ...(previousInteractionId ? { previous_interaction_id: previousInteractionId } : {}) });
+      let interactionId = null; const calls = new Map(); let requiresAction = false;
       for await (const event of stream) {
         if (event.event_type === 'interaction.created') interactionId = event.interaction?.id || null;
-        if (event.event_type === 'step.start') {
-          const type = event.step?.type;
-          if (type === 'google_search_call') sendEvent(res, 'state', { state: 'searching' });
-          if (type === 'function_call') calls.set(event.index, { name: event.step.name, id: event.step.id, args: '' });
-        }
+        if (event.event_type === 'step.start') { const type = event.step?.type; if (type === 'google_search_call') sendEvent(res, 'state', { state: 'searching' }); if (type === 'function_call') calls.set(event.index, { name: event.step.name, id: event.step.id, args: '' }); }
         if (event.event_type === 'step.delta') {
           if (event.delta?.type === 'text' && event.delta.text) sendEvent(res, 'token', { text: event.delta.text });
-          if (event.delta?.type === 'arguments_delta' && calls.has(event.index)) calls.get(event.index).args += event.delta.arguments || '';
-          const citations = extractCitations(event);
-          if (citations.length) sendEvent(res, 'citations', citations);
+          if (event.delta?.type === 'arguments' && calls.has(event.index)) calls.get(event.index).args += event.delta.partial_arguments || '';
         }
-        if (event.event_type === 'interaction.completed' && event.interaction?.status === 'requires_action') requiresAction = true;
+        if (event.event_type === 'interaction.requires_action') requiresAction = true;
       }
-      if (!requiresAction || !interactionId || calls.size === 0) {
-        sendEvent(res, 'done', { sessionId: sid, model: MODEL });
-        return res.end();
-      }
-      const results = [];
-      for (const call of calls.values()) {
-        let args = {};
-        try { args = JSON.parse(call.args || '{}'); } catch { args = {}; }
-        const result = await executeTool(call.name, args);
-        results.push({ type: 'function_result', name: call.name, call_id: call.id, result: [{ type: 'text', text: JSON.stringify(result) }] });
-      }
-      req._previousInteractionId = interactionId;
-      input = results;
+      if (!requiresAction || !interactionId || calls.size === 0) { sendEvent(res, 'done', { sessionId: sid, model: MODEL }); return res.end(); }
+      const results = []; for (const call of calls.values()) { let args = {}; try { args = JSON.parse(call.args || '{}'); } catch { args = {}; } args.session_id ||= sid; const result = await executeTool(call.name, args); results.push({ type: 'function_result', name: call.name, call_id: call.id, result: [{ type: 'text', text: JSON.stringify(result) }] }); }
+      previousInteractionId = interactionId; input = results;
     }
-    sendEvent(res, 'done', { sessionId: sid, model: MODEL });
-    res.end();
-  } catch (error) {
-    console.error('Streaming Gemini request failed:', error);
-    sendEvent(res, 'error', { error: 'Gemini streaming failed. Check your API key, model and server logs.' });
-    res.end();
-  }
+    sendEvent(res, 'done', { sessionId: sid, model: MODEL }); res.end();
+  } catch (error) { console.error('Streaming Gemini request failed:', error); sendEvent(res, 'error', { error: 'Gemini streaming failed. Check your API key, model and server logs.' }); res.end(); }
 });
 
-app.get('/api/memory/:sessionId', async (req, res) => {
-  const sid = sessionId(req.params.sessionId);
-  if (!sid) return res.status(400).json({ error: 'Invalid session id.' });
-  const all = await readJson(MEMORY_FILE, {});
-  res.json({ memories: Array.isArray(all[sid]) ? all[sid] : [] });
-});
-
-app.get('/api/notes/:sessionId', async (req, res) => {
-  const sid = sessionId(req.params.sessionId);
-  if (!sid) return res.status(400).json({ error: 'Invalid session id.' });
-  const all = await readJson(NOTES_FILE, {});
-  res.json({ notes: Array.isArray(all[sid]) ? all[sid].slice(0, 20) : [] });
-});
-
+app.get('/api/memory/:sessionId', async (req, res) => { const sid = sessionId(req.params.sessionId); if (!sid) return res.status(400).json({ error: 'Invalid session id.' }); const all = await readJson(MEMORY_FILE, {}); res.json({ memories: Array.isArray(all[sid]) ? all[sid] : [] }); });
+app.get('/api/notes/:sessionId', async (req, res) => { const sid = sessionId(req.params.sessionId); if (!sid) return res.status(400).json({ error: 'Invalid session id.' }); const all = await readJson(NOTES_FILE, {}); res.json({ notes: Array.isArray(all[sid]) ? all[sid].slice(0, 20) : [] }); });
 app.get('/*splat', (_req, res) => res.sendFile(path.join(__dirname, '..', 'index.html')));
 app.listen(PORT, () => console.log(`VantaVoice server running at http://localhost:${PORT}`));
