@@ -1,50 +1,9 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="VantaVoice — a sleek browser voice assistant." />
-  <title>VantaVoice</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css" />
-</head>
-<body>
-  <div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
-  <main class="app-shell">
-    <header class="topbar">
-      <div class="brand"><span class="brand-mark">V</span><div><strong>VantaVoice</strong><small>VOICE INTELLIGENCE</small></div></div>
-      <div class="status"><span class="dot"></span> Browser voice ready</div>
-    </header>
-
-    <section class="hero">
-      <p class="eyebrow">PRIVATE • FAST • HANDS-FREE</p>
-      <h1>Speak.<br><span>VantaVoice.</span></h1>
-      <p class="subtitle">Your voice, turned into actions — directly in the browser.</p>
-
-      <div class="orb-wrap">
-        <div class="ring ring-1"></div><div class="ring ring-2"></div>
-        <button id="micBtn" class="mic" aria-label="Start voice recognition"><span class="mic-icon">●</span></button>
-      </div>
-      <div id="state" class="state">Tap the microphone to speak</div>
-
-      <div class="transcript-card">
-        <div class="card-head"><span>LIVE TRANSCRIPT</span><button id="clearBtn">Clear</button></div>
-        <div id="transcript" class="transcript">Your words will appear here…</div>
-        <div id="response" class="response"></div>
-      </div>
-
-      <div class="quick-actions">
-        <button data-command="What time is it?">Time</button>
-        <button data-command="What is today's date?">Date</button>
-        <button data-command="Tell me a joke">Joke</button>
-        <button data-command="Hello VantaVoice">Hello</button>
-      </div>
-    </section>
-
-    <footer>VantaVoice <span>•</span> Local browser voice layer <span>•</span> AI-ready architecture</footer>
-  </main>
-  <script src="app.js"></script>
-</body>
-</html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#07070a"><meta name="description" content="VantaVoice — privacy-first voice intelligence"><link rel="manifest" href="manifest.webmanifest"><title>VantaVoice — Voice Intelligence</title><link rel="stylesheet" href="style.css"></head>
+<body><main class="app-shell"><header class="topbar"><div class="brand"><span class="brand-mark">V</span><div><strong>VantaVoice</strong><small>VOICE INTELLIGENCE</small></div></div><div class="status"><span class="dot"></span><span id="statusText">System ready</span></div></header>
+<section class="hero"><p class="eyebrow">PRIVATE • FAST • HANDS-FREE</p><h1>Speak.<br><span>VantaVoice.</span></h1><p class="subtitle">A voice-first AI workspace that understands, remembers and acts.</p>
+<div class="orb-wrap"><div class="wave" id="wave"></div><div class="ring ring-1"></div><div class="ring ring-2"></div><button id="micBtn" class="mic" aria-label="Start voice recognition"><span class="mic-symbol">◉</span></button></div><div id="state" class="state">Tap the microphone to speak</div>
+<div class="transcript-card"><div class="card-head"><span>CONVERSATION</span><div><button id="historyBtn">History</button><button id="clearBtn">Clear</button></div></div><div id="transcript" class="transcript">Your words will appear here…</div><div id="response" class="response"></div></div>
+<div class="quick-actions"><button data-command="What time is it?">Time</button><button data-command="What is today's date?">Date</button><button data-command="Tell me a joke">Joke</button><button data-command="Open my settings">Settings</button></div>
+<div class="panel" id="historyPanel"><div class="panel-title">Conversation history</div><div id="historyList">No conversations yet.</div></div><div class="panel" id="settingsPanel"><div class="panel-title">VantaVoice settings</div><label>Voice replies <input id="voiceToggle" type="checkbox" checked></label><label>Language <select id="langSelect"><option value="en-IN">English (India)</option><option value="en-US">English (US)</option><option value="hi-IN">Hindi</option></select></label><p class="hint">AI mode can be connected through a secure backend. Never expose private API keys in this frontend.</p></div>
+</section><footer>VantaVoice <span>•</span> Local voice layer <span>•</span> AI-ready <span>•</span> PWA</footer></main><script src="app.js"></script></body></html>
