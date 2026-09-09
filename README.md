@@ -32,6 +32,8 @@ Gemini function calling follows Google's current pattern: the model proposes a f
 ## Features
 
 - 🎙️ Browser-native voice input
+- 🔁 Hands-free turn-taking: listen, answer, speak, and resume automatically
+- 🗣️ Optional “Hey Vanta” wake-word mode
 - 🤖 Gemini-powered natural-language responses
 - 🧰 Secure server-side function/tool calling
 - ⏱️ Current time and date tools
@@ -88,12 +90,19 @@ Opening `index.html` directly still gives you the local voice UI, but Gemini mod
 
 ## Roadmap
 
-1. Streaming Gemini responses
-2. Wake-word / hands-free mode
-3. More allowlisted productivity tools
-4. Optional encrypted cloud conversation sync
-5. Accessibility and keyboard-first controls
-6. Deployment-ready backend configuration
+1. More allowlisted productivity tools
+2. Optional encrypted cloud conversation sync
+3. Accessibility and keyboard-first controls
+4. Deployment-ready backend configuration
+
+## Hands-free demo
+
+1. Start the server and open `http://localhost:3000`.
+2. Click **Hands-free session** once and allow microphone access.
+3. Talk naturally. VantaVoice listens, answers aloud, and resumes listening after the reply.
+4. For wake-word mode, enable **Wake word** and say “Hey Vanta” before each command.
+
+Browser speech recognition is provided by Chrome/Edge Web Speech APIs. A microphone permission gesture is required by the browser; after that, the conversation loop is automatic. Voice history remains local to the browser.
 
 ## License
 
