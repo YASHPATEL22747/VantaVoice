@@ -63,6 +63,7 @@ async function generateResponse(contents, context) {
 }
 function geminiErrorMessage(error) {
   if (error?.status === 401) return 'Gemini authentication failed. Set GEMINI_API_KEY to a valid Google AI Studio API key.';
+  if (error?.status === 429) return 'Gemini quota exceeded. Check your Google AI Studio plan, billing, or rate limits.';
   return 'Gemini request failed. Check server configuration and try again.';
 }
 function sendEvent(res, event, data) { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); }
