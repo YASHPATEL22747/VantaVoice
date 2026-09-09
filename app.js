@@ -39,7 +39,18 @@ async function askGemini(text) {
     if (!answerText) answerText = 'I could not generate a response.'; saveHistory(text, answerText); requestInFlight = false; shouldResume = handsFree; speak(answerText); if (!voiceToggle.checked) maybeResume();
   } catch (error) { requestInFlight = false; const message = error.message.includes('Failed to fetch') ? 'Backend is not running. Start the VantaVoice server.' : error.message; response.textContent = message; saveHistory(text, message); setState('error', message); if (handsFree && !wakeEnabled) window.setTimeout(startListening, 1200); }
 }
-function localAnswer(query) { if (query.includes('setting')) { openPanel(settingsPanel); return 'Settings panel opened.'; } if (query.includes('joke')) return 'Why do programmers prefer dark mode? Because light attracts fewer bugs.'; if (/^(hello|hi|hey)\b/.test(query)) return 'Hey! VantaVoice is listening.'; return null; }
+function localAnswer(query) {
+  if (query.includes('setting')) { openPanel(settingsPanel); return 'Settings panel opened.'; }
+  if (query.includes('joke')) return 'Why do programmers prefer dark mode? Because light attracts fewer bugs.';
+  if (/\b(time|samay)\b/.test(query)) return `It is ${new Intl.DateTimeFormat(langSelect.value, { hour: 'numeric', minute: '2-digit' }).format(new Date())}.`;
+  if (/\b(date|today|tarikh)\b/.test(query)) return `Today is ${new Intl.DateTimeFormat(langSelect.value, { dateStyle: 'full' }).format(new Date())}.`;
+  const calculation = query.match(/(?:calculate|what is)\s+([0-9+\-*/%.()\s]+)\??$/);
+  if (calculation && /^[0-9+\-*/%.()\s]+$/.test(calculation[1])) {
+    try { const result = Function(`"use strict"; return (${calculation[1]})`)(); if (Number.isFinite(result)) return `The answer is ${result}.`; } catch { return 'That calculation is not valid.'; }
+  }
+  if (/^(hello|hi|hey)\b/.test(query)) return 'Hey! VantaVoice is listening.';
+  return null;
+}
 async function answer(text) { const query = text.toLowerCase().trim(); transcript.textContent = text; const local = localAnswer(query); if (local) { response.textContent = local; saveHistory(text, local); speak(local); return; } await askGemini(text); }
 function openPanel(panel) { panel.hidden = false; panel.classList.add('show'); }
 function closePanel(panel) { panel.classList.remove('show'); window.setTimeout(() => { panel.hidden = true; }, 180); }
@@ -57,5 +68,14 @@ voiceToggle.addEventListener('change', saveSettings); resumeSelect.addEventListe
 $('historyBtn').onclick = () => openPanel(historyPanel); $('settingsBtn').onclick = () => openPanel(settingsPanel); $('clearBtn').onclick = () => { transcript.textContent = 'Your words will appear here...'; response.textContent = 'Vanta is ready when you are.'; setState('idle'); }; document.querySelectorAll('[data-close]').forEach(button => button.onclick = () => closePanel($(button.dataset.close))); document.querySelectorAll('[data-command]').forEach(button => button.onclick = () => answer(button.dataset.command));
 document.addEventListener('keydown', event => { if (event.key === ' ' && event.target === document.body) { event.preventDefault(); handsFree ? setHandsFree(false) : setHandsFree(true); } if (event.key === 'Escape') { stopSpeech(); setHandsFree(false); } });
 renderHistory(); updateControls();
+function bootHandsFree() {
+  if (!SpeechRecognition || storedSettings.handsFree === false) return;
+  handsFree = true;
+  shouldResume = true;
+  updateControls();
+  setState('listening', 'Starting hands-free mode...');
+  window.setTimeout(startListening, 700);
+}
+window.addEventListener('load', () => window.setTimeout(bootHandsFree, 500));
 fetch('/api/health').then(result => result.json()).then(data => { statusText.textContent = data.aiConfigured ? 'AI connected' : 'Backend ready - add Gemini key'; }).catch(() => { statusText.textContent = 'Local mode'; });
 if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));

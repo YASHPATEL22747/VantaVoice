@@ -98,9 +98,10 @@ Opening `index.html` directly still gives you the local voice UI, but Gemini mod
 ## Hands-free demo
 
 1. Start the server and open `http://localhost:3000`.
-2. Click **Hands-free session** once and allow microphone access.
-3. Talk naturally. VantaVoice listens, answers aloud, and resumes listening after the reply.
-4. For wake-word mode, enable **Wake word** and say “Hey Vanta” before each command.
+2. VantaVoice attempts to start hands-free listening automatically.
+3. If the browser asks for microphone permission, allow it once. Some browsers require the **Hands-free session** button for this first permission gesture.
+4. Talk naturally. VantaVoice listens, answers aloud, and resumes listening after the reply.
+5. For wake-word mode, enable **Wake word** and say “Hey Vanta” before each command.
 
 Browser speech recognition is provided by Chrome/Edge Web Speech APIs. A microphone permission gesture is required by the browser; after that, the conversation loop is automatic. Voice history remains local to the browser.
 
